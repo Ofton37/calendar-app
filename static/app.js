@@ -1,11 +1,22 @@
 const API_BASE = "http://127.0.0.1:8000";
 
 let currentDate = new Date(); // 現在表示している年月
+let editingEventId = null; // 編集中の予定ID（nullなら新規作成）
 
 const monthYearDisplay = document.getElementById("month-year-display");
 const calendarGrid = document.getElementById("calendar-grid");
 const prevBtn = document.getElementById("prev-btn");
 const nextBtn = document.getElementById("next-btn");
+
+// モーダル関連の要素
+const modal = document.getElementById("event-modal");
+const closeModalBtn = document.getElementById("close-modal-btn");
+const eventForm = document.getElementById("event-form");
+const deleteBtn = document.getElementById("delete-btn");
+
+// 繰り返し用の要素
+const isRecurringCheckbox = document.getElementById("is-recurring");
+const recurringOptions = document.getElementById("recurring-options");
 
 // 初期ロード
 document.addEventListener("DOMContentLoaded", () => {
@@ -22,6 +33,17 @@ nextBtn.addEventListener("click", () => {
     currentDate.setMonth(currentDate.getMonth() + 1);
     loadCalendar();
 });
+
+// 「毎週繰り返す」チェックボックスの切り替え表示
+if (isRecurringCheckbox && recurringOptions) {
+    isRecurringCheckbox.addEventListener("change", (e) => {
+        if (e.target.checked) {
+            recurringOptions.classList.remove("hidden");
+        } else {
+            recurringOptions.classList.add("hidden");
+        }
+    });
+}
 
 // カレンダー全体の読み込みと描画
 async function loadCalendar() {
@@ -86,12 +108,19 @@ function renderCalendarGrid(year, month, events) {
                 const eventDiv = document.createElement("div");
                 eventDiv.classList.add("event-item");
                 eventDiv.textContent = event.title;
+                
+                // 予定をクリックしたときは編集モーダルを開く（セルのクリック発火を防ぐ）
+                eventDiv.addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    openEditModal(event);
+                });
+
                 cell.appendChild(eventDiv);
             });
 
-            // 日付セルをクリックしたときの処理（予定追加用）
+            // 空白セルをクリックしたときの処理（新規予定追加用）
             cell.addEventListener("click", () => {
-                openEventModal(cellDateStr);
+                openCreateModal(cellDateStr);
             });
 
             dayCounter++;
@@ -106,48 +135,143 @@ function renderCalendarGrid(year, month, events) {
     }
 }
 
-// モーダル関連の簡易処理
-const modal = document.getElementById("event-modal");
-const closeModalBtn = document.getElementById("close-modal-btn");
-const eventForm = document.getElementById("event-form");
-
-function openEventModal(dateStr) {
+// 新規作成用モーダルを開く
+function openCreateModal(dateStr) {
+    editingEventId = null;
     document.getElementById("event-date").value = dateStr;
     document.getElementById("modal-date-title").textContent = `${dateStr} の予定追加`;
+    document.getElementById("event-title").value = "";
+    document.getElementById("event-category").value = "";
+    
+    // 繰り返し設定をリセット
+    if (isRecurringCheckbox) {
+        isRecurringCheckbox.checked = false;
+    }
+    if (recurringOptions) {
+        recurringOptions.classList.add("hidden");
+    }
+
+    if (deleteBtn) deleteBtn.classList.add("hidden"); // 新規時は削除ボタン非表示
     modal.classList.remove("hidden");
 }
 
+// 編集用モーダルを開く
+function openEditModal(event) {
+    editingEventId = event.id;
+    const dateStr = event.start_at.split("T")[0];
+    
+    document.getElementById("event-date").value = dateStr;
+    document.getElementById("modal-date-title").textContent = `予定の編集`;
+    document.getElementById("event-title").value = event.title;
+    document.getElementById("event-category").value = event.category || "";
+    
+    // 編集時は繰り返し設定を隠す（単発ごとの編集のため）
+    if (isRecurringCheckbox) {
+        isRecurringCheckbox.checked = false;
+    }
+    if (recurringOptions) {
+        recurringOptions.classList.add("hidden");
+    }
+
+    if (deleteBtn) deleteBtn.classList.remove("hidden"); // 編集時は削除ボタンを表示
+    modal.classList.remove("hidden");
+}
+
+// モーダルを閉じる
 closeModalBtn.addEventListener("click", () => {
     modal.classList.add("hidden");
 });
 
+// フォーム送信時（新規作成 or 繰り返し作成 or 編集の保存）
 eventForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const dateStr = document.getElementById("event-date").value;
     const title = document.getElementById("event-title").value;
     const category = document.getElementById("event-category").value;
-
-    const newEvent = {
-        title: title,
-        description: "",
-        start_at: `${dateStr}T10:00:00`,
-        end_at: `${dateStr}T11:00:00`,
-        category: category
-    };
+    const isRecurring = isRecurringCheckbox ? isRecurringCheckbox.checked : false;
 
     try {
-        const response = await fetch(`${API_BASE}/events`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(newEvent)
-        });
+        let response;
+        if (isRecurring && !editingEventId) {
+            // 繰り返し予定の作成（POST /events/recurring）
+            const weekday = parseInt(document.getElementById("recurring-weekday").value);
+            const weeksCount = parseInt(document.getElementById("recurring-count").value);
+
+            const recurringData = {
+                title: title,
+                description: "",
+                start_time: "10:00:00",
+                end_time: "11:00:00",
+                category: category,
+                target_weekday: weekday,
+                weeks_count: weeksCount
+            };
+
+            response = await fetch(`${API_BASE}/events/recurring`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(recurringData)
+            });
+        } else if (editingEventId) {
+            // 編集（PUT）
+            const dateStr = document.getElementById("event-date").value;
+            const eventData = {
+                title: title,
+                description: "",
+                start_at: `${dateStr}T10:00:00`,
+                end_at: `${dateStr}T11:00:00`,
+                category: category
+            };
+            response = await fetch(`${API_BASE}/events/${editingEventId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(eventData)
+            });
+        } else {
+            // 通常の単発作成（POST）
+            const dateStr = document.getElementById("event-date").value;
+            const eventData = {
+                title: title,
+                description: "",
+                start_at: `${dateStr}T10:00:00`,
+                end_at: `${dateStr}T11:00:00`,
+                category: category
+            };
+            response = await fetch(`${API_BASE}/events`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(eventData)
+            });
+        }
 
         if (response.ok) {
             modal.classList.add("hidden");
             eventForm.reset();
+            if (recurringOptions) recurringOptions.classList.add("hidden");
             loadCalendar(); // カレンダーを再読み込み
         }
     } catch (error) {
-        console.error("予定の登録に失敗しました:", error);
+        console.error("保存に失敗しました:", error);
     }
 });
+
+// 削除ボタンの処理
+if (deleteBtn) {
+    deleteBtn.addEventListener("click", async () => {
+        if (!editingEventId) return;
+        if (!confirm("この予定を削除してもよろしいですか？")) return;
+
+        try {
+            const response = await fetch(`${API_BASE}/events/${editingEventId}`, {
+                method: "DELETE"
+            });
+
+            if (response.ok) {
+                modal.classList.add("hidden");
+                eventForm.reset();
+                loadCalendar(); // カレンダーを再読み込み
+            }
+        } catch (error) {
+            console.error("削除に失敗しました:", error);
+        }
+    });
+}

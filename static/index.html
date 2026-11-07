@@ -30,7 +30,7 @@
         <div id="calendar-grid" class="calendar-grid"></div>
     </div>
 
-    <!-- 予定追加・詳細用の簡易モーダル（必要に応じて拡張） -->
+    <!-- 予定追加・編集・繰り返し用のモーダル -->
     <div id="event-modal" class="modal hidden">
         <div class="modal-content">
             <h3 id="modal-date-title">予定の追加</h3>
@@ -44,8 +44,37 @@
                     <label>カテゴリ:</label>
                     <input type="text" id="event-category" placeholder="例: 勉強、プライベート">
                 </div>
+
+                <!-- 繰り返し用のチェックボックス -->
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="is-recurring"> 毎週繰り返す
+                    </label>
+                </div>
+
+                <!-- 繰り返し設定エリア（最初は非表示） -->
+                <div id="recurring-options" class="hidden">
+                    <div class="form-group">
+                        <label>曜日:</label>
+                        <select id="recurring-weekday">
+                            <option value="0">月曜日</option>
+                            <option value="1">火曜日</option>
+                            <option value="2">水曜日</option>
+                            <option value="3">木曜日</option>
+                            <option value="4">金曜日</option>
+                            <option value="5">土曜日</option>
+                            <option value="6">日曜日</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>繰り返し回数（週）:</label>
+                        <input type="number" id="recurring-count" value="4" min="1" max="52">
+                    </div>
+                </div>
+
                 <div class="form-actions">
-                    <button type="submit">保存</button>
+                    <button type="submit" id="save-btn">保存</button>
+                    <button type="button" id="delete-btn" class="danger-btn hidden">削除</button>
                     <button type="button" id="close-modal-btn">キャンセル</button>
                 </div>
             </form>
