@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import List
+from fastapi.staticfiles import StaticFiles
 
 import models
 import schemas
@@ -12,7 +13,7 @@ from database import engine, get_db
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # フロントエンドからのCORS許可（開発用）
 app.add_middleware(
     CORSMiddleware,
